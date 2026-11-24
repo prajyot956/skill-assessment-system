@@ -112,33 +112,7 @@ Data included: 64 skills · 26 built-in assessments · **319 assessment question
 
 ---
 
-## 3. Known limitations (please read)
-
-**Verification gaps**
-- The new admin project/interview bank screens have passed a real-browser smoke test. There has not been a full screen-reader or accessibility audit.
-- **AI has not yet been called against the live provider.** The Render blueprint selects Groq, but a newly rotated key must be added in Render before making a live request. Request and response handling is tested with mocked responses, including failures.
-- No screen-reader or full accessibility audit (labels, roles, focus handling and reduced-motion are implemented).
-
-**Content**
-- All 26 built-in assessments have seeded question pools (319 original questions), served to the frontend through this app's API. Each pool has at least three questions at each difficulty. The catalog is API-backed; the question content itself is stored in the database, not fetched from a third-party question API. Resume-derived skills outside the built-in set can use on-demand AI question generation after Groq is configured.
-- The starter questions were written for this project and should be reviewed by a subject expert before any high-stakes use. Pools remain small for longer tests, which borrow from neighbouring difficulties (the UI says so); repeat attempts can also see questions again across attempts.
-- Some role skills are outside the built-in assessment set (for example Docker, AWS, Linux, Git, and Networking). The catalog can add assessments for confirmed profile skills; without configured AI, those extra assessments have no question pool.
-- Difficulty weights (0.6/0.85/1.0), performance bands and match adjustments are sensible design choices, **not psychometrically validated**.
-- Seeded learning-resource links were checked on 2026-11-24; outdated scikit-learn and Linux course links were replaced. External sites can still move pages, and admins can edit resource links.
-- Admins can now add, edit, retire, and restore practice projects and interview-bank questions. Existing interview attempts keep the question snapshots they started with. Difficulty levels remain a fixed set.
-
-**Resume reading**
-- The built-in parser is heuristic and English-only. Unusual layouts (multi-column, tables, graphics-heavy designs) can mis-assign fields. The review step exists for exactly this.
-- Scanned/image-only PDFs are rejected (no OCR).
-- Only the latest resume is kept.
-
-**Operations**
-- Local development uses Flask's development server; Render uses Gunicorn in Docker and serves the built frontend from the same origin.
-- Rate limiting is in-memory and per-process (use a shared store for multiple workers).
-- No email verification at registration; password reset needs SMTP or the console. The free Render demo has ephemeral resume storage and an expiring database; see the deployment notes above.
-- PostgreSQL migrations, seed data, and the deployed health endpoint were verified on Render. Broader load and failover behavior have not been tested.
-
-## 4. Layout
+## 3. Layout
 ```
 backend/app/{models,routes,services,ai,seeds,utils,config}   backend/migrations   backend/tests
 frontend/src/{pages,components,layouts,context,hooks,services,types,utils}

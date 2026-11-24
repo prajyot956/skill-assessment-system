@@ -9,6 +9,7 @@ from app.models import (Assessment, AssessmentAttempt, AssessmentCategory, Attem
                         QuestionOption, Skill, UserSkill)
 from app.models.base import utcnow
 from app.services import assessment_service as svc
+from app.seeds.skills import CATEGORIES
 
 
 def aid(skill_name):
@@ -35,6 +36,13 @@ def wrong_answer(q):
 
 
 class TestCatalogAndStart:
+    def test_every_builtin_assessment_has_a_seeded_question_pool(self, seeded):
+        skill_names = {name for _, _, skills in CATEGORIES for name, _ in skills}
+        assert len(skill_names) == 26
+        for name in skill_names:
+            skill = Skill.query.filter_by(name=name).one()
+            assert svc.available_counts(skill.id)["total"] >= svc.MIN_QUESTIONS, name
+
     def test_catalog_lists_available_assessments_without_answers(self, seeded, make_client):
         c = make_client()
         r = c.get("/api/assessments/catalog")

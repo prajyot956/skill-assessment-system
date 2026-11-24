@@ -48,7 +48,7 @@ Sign in with that account; an **Administration** item appears in the sidebar (us
 ```powershell
 cd backend; $env:FLASK_APP = "run.py"
 .\.venv\Scripts\flask.exe db upgrade      # apply migrations (backend/migrations)
-.\.venv\Scripts\flask.exe seed            # load skills, assessments, 106 questions, 11 roles, resources, projects (idempotent: never overwrites admin edits)
+.\.venv\Scripts\flask.exe seed            # load skills, assessments, 314 questions, 11 roles, resources, projects (idempotent: never overwrites admin edits)
 ```
 The schema is in `backend/app/models/` (29 tables). To move to PostgreSQL later, set `DATABASE_URL=postgresql+psycopg://...` and `pip install "psycopg[binary]"`; constraint names are explicit so migrations are portable.
 
@@ -78,11 +78,11 @@ The root `render.yaml` and `Dockerfile` deploy the frontend and API as one same-
 2. In Render, choose **New + → Blueprint**, connect the repository, and apply the `render.yaml` blueprint. It creates the web service and database.
 3. Wait for the service health check to pass at `/api/health`, then register an account. To make yourself an administrator, open the service's Shell and run `flask --app run.py create-admin` from `/app/backend`.
 
-This free configuration is for demos only: the web service can spin down while idle, free PostgreSQL expires after 30 days, and uploaded resumes are on ephemeral storage and can disappear on restart or deploy. Do not upload sensitive or real user resumes to this demo. For durable use, choose a paid database and web service, attach persistent storage for uploads, and configure SMTP before enabling password reset for users. AI and email are disabled unless configured.
+This free configuration is for demos only: the web service can spin down while idle, free PostgreSQL expires after 30 days, and uploaded resumes are on ephemeral storage and can disappear on restart or deploy. Do not upload sensitive or real user resumes to this demo. For durable use, choose a paid database and web service, attach persistent storage for uploads, and configure SMTP before enabling password reset for users. The blueprint selects Groq, but AI remains unavailable until you add a rotated `AI_API_KEY` in Render's Environment settings. Never commit or paste the key into chat. Email remains disabled unless SMTP is configured.
 
 ### Run the tests
 ```powershell
-cd backend;  .\.venv\Scripts\python.exe -m pytest          # 153 tests
+cd backend;  .\.venv\Scripts\python.exe -m pytest          # 154 tests
 cd frontend; npm test                                      # 26 tests
 cd frontend; npm run build                                 # type-check + production build
 # live end-to-end journey against a running API (20 steps):
@@ -108,7 +108,7 @@ cd backend;  .\.venv\Scripts\python.exe tests\e2e_smoke.py http://127.0.0.1:5000
 | **Practice** | 13 projects ranked by relevance to your target gaps, with status tracking; mock interviews (bank or AI) with no fake scores. |
 | **Admin** | Users (activate/deactivate), question CRUD with validation (retire, never delete), categories, skills, assessments, role requirements (weights/levels), learning resources, stats. Every admin route is server-gated; a test enforces this for all of them. |
 
-Data included: 64 skills · 26 assessments · **106 questions** · 11 career roles · 27 learning resources · 13 projects.
+Data included: 64 skills · 26 built-in assessments · **314 questions** · 11 career roles · 27 learning resources · 13 projects.
 
 ---
 
@@ -116,15 +116,15 @@ Data included: 64 skills · 26 assessments · **106 questions** · 11 career rol
 
 **Verification gaps**
 - **Not run on Windows or in a real browser.** Everything was verified on Linux with automated tests, a production build, and a live end-to-end API run. `setup.ps1` and the UI's visual rendering have not been seen by a human. Expect to find cosmetic issues.
-- **AI has never been called against the live provider** (no key was available while building). The request and response handling is tested with mocked responses, including failures; the first real call may need prompt or model-name tweaks.
+- **AI has not yet been called against the live provider.** The Render blueprint selects Groq, but a newly rotated key must be added in Render before making a live request. Request and response handling is tested with mocked responses, including failures.
 - No screen-reader or full accessibility audit (labels, roles, focus handling and reduced-motion are implemented).
 
 **Content**
-- **Only 10 of the 26 assessments have questions** (Python, SQL, JavaScript, HTML, CSS, Machine Learning, Statistics, Logical Reasoning, Quantitative Aptitude, Excel). The rest are listed as "Questions coming soon" and cannot be started. Add questions in Admin → Questions.
-- The 106 starter questions were written for this project and should be reviewed by a subject expert before any high-stakes use. Per-difficulty pools are small (2-5 questions), so tests with many questions borrow from neighbouring difficulties (the UI says so) and repeat attempts will see repeats across attempts.
-- Many roles require skills with no assessment yet (Docker, AWS, Linux, Git, Networking...). Those skills can be confirmed but never verified, so they cap at 40 % credit.
+- All 26 built-in assessments have seeded question pools (314 original questions), served to the frontend through this app's API. The catalog is API-backed; the question content itself is stored in the database, not fetched from a third-party question API. Resume-derived skills outside the built-in set can use on-demand AI question generation after Groq is configured.
+- The starter questions were written for this project and should be reviewed by a subject expert before any high-stakes use. Per-difficulty pools are small, so tests with many questions borrow from neighbouring difficulties (the UI says so) and repeat attempts can see questions again across attempts.
+- Some role skills are outside the built-in assessment set (for example Docker, AWS, Linux, Git, and Networking). The catalog can add assessments for confirmed profile skills; without configured AI, those extra assessments have no question pool.
 - Difficulty weights (0.6/0.85/1.0), performance bands and match adjustments are sensible design choices, **not psychometrically validated**.
-- Learning-resource links were chosen from well-known official sources but not link-checked; admins can edit them.
+- Seeded learning-resource links were checked on 2026-11-24; outdated scikit-learn and Linux course links were replaced. External sites can still move pages, and admins can edit resource links.
 - Interview and project banks are edited in `backend/app/seeds/`, not in the admin UI. Difficulty levels are a fixed set.
 
 **Resume reading**
@@ -136,7 +136,7 @@ Data included: 64 skills · 26 assessments · **106 questions** · 11 career rol
 - Local development uses Flask's development server; Render uses Gunicorn in Docker and serves the built frontend from the same origin.
 - Rate limiting is in-memory and per-process (use a shared store for multiple workers).
 - No email verification at registration; password reset needs SMTP or the console. The free Render demo has ephemeral resume storage and an expiring database; see the deployment notes above.
-- PostgreSQL compatibility is by design (explicit constraint names, portable types) but untested.
+- PostgreSQL migrations, seed data, and the deployed health endpoint were verified on Render. Broader load and failover behavior have not been tested.
 
 ## 4. Layout
 ```

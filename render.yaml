@@ -19,7 +19,9 @@ services:
           name: skill-assessment-system-db
           property: connectionString
       - key: AI_PROVIDER
-        value: none
+        value: groq
+      - key: AI_MODEL
+        value: openai/gpt-oss-120b
 
 databases:
   - name: skill-assessment-system-db

@@ -3,8 +3,8 @@ import re
 import pytest
 
 from app.extensions import db
-from app.models import (Assessment, AssessmentCategory, CareerRole, LearningResource, LearningRoadmap, Question, RoadmapItem,
-                        Skill, User)
+from app.models import (Assessment, AssessmentCategory, CareerRole, InterviewQuestion, LearningResource, LearningRoadmap,
+                        PracticeProject, Question, RoadmapItem, Skill, User)
 from tests.conftest import PASSWORD, register
 from tests.test_assessments import aid, start
 from tests.test_careers_learning import put_skill, role_id
@@ -167,6 +167,59 @@ class TestAdminRolesAndResources:
         rid = res.json["data"]["id"]
         assert admin.put(f"/api/admin/resources/{rid}", json={"skill_id": sid, "title": "Renamed", "url": "https://example.com/y"}).json["data"]["title"] == "Renamed"
         assert admin.delete(f"/api/admin/resources/{rid}").status_code == 200 and db.session.get(LearningResource, rid) is None
+
+    def test_project_and_interview_banks_are_admin_managed(self, admin, seeded, make_client):
+        skill = Skill.query.filter_by(name="Python").one()
+        project = admin.post("/api/admin/projects", json={
+            "title": "Python practice", "description": "Build a small tool.", "difficulty": "beginner",
+            "skill_slugs": [skill.slug], "objectives": ["Use functions"], "steps": ["Plan", "Build"],
+            "expected_outcome": "A working tool.",
+        })
+        assert project.status_code == 201 and project.json["data"]["skills"] == ["Python"]
+        project_id = project.json["data"]["id"]
+        user = make_client()
+        assert any(row["id"] == project_id for row in user.get("/api/practice/projects").json["data"])
+        assert admin.put(f"/api/admin/projects/{project_id}", json={"is_active": False}).status_code == 200
+        assert all(row["id"] != project_id for row in user.get("/api/practice/projects").json["data"])
+        assert admin.post("/api/admin/projects", json={
+            "title": "Invalid project", "description": "Bad skill.", "difficulty": "beginner",
+            "skill_slugs": ["unknown"], "objectives": ["Learn"], "steps": ["Start"],
+        }).status_code == 422
+
+        InterviewQuestion.query.filter_by(skill_id=skill.id).update({"is_active": False})
+        db.session.commit()
+        created = []
+        for text in ("How do Python generators save memory?", "When would you use a context manager?"):
+            response = admin.post("/api/admin/interview-questions", json={
+                "skill_id": skill.id, "difficulty": "beginner", "text": text, "keywords": ["yield", "iterator"],
+            })
+            assert response.status_code == 201
+            created.append(response.json["data"])
+        assert admin.get("/api/admin/catalog").json["data"]["skills"][0].get("slug") is not None
+        put_skill(User.query.filter_by(email="ana@example.com").one().id, "Python")
+        started = user.post("/api/interviews", json={"difficulty": "beginner", "num_questions": 3})
+        assert started.status_code == 201
+        asked = {row["text"] for row in started.json["data"]["questions"]}
+        assert {row["text"] for row in created} <= asked
+
+        iid = started.json["data"]["id"]
+        admin.put(f"/api/admin/interview-questions/{created[0]['id']}", json={"text": "Updated generator question"})
+        saved = user.get(f"/api/interviews/{iid}").json["data"]["questions"]
+        assert created[0]["text"] in {row["text"] for row in saved}  # existing attempts retain their question snapshot
+        assert admin.put(f"/api/admin/interview-questions/{created[0]['id']}", json={"is_active": False}).status_code == 200
+
+        seed_project = PracticeProject.query.filter(PracticeProject.seed_key.isnot(None)).first()
+        seed_question = InterviewQuestion.query.filter(InterviewQuestion.seed_key.isnot(None)).first()
+        original_project_title, original_question_text = seed_project.title, seed_question.text
+        seed_project.title = "Admin-edited seeded project"
+        seed_question.text = "Admin-edited seeded interview question"
+        db.session.commit()
+        project_count, question_count = PracticeProject.query.count(), InterviewQuestion.query.count()
+        from app.services.seed_service import seed_all
+        seed_all()
+        assert PracticeProject.query.count() == project_count and InterviewQuestion.query.count() == question_count
+        assert PracticeProject.query.filter_by(title=original_project_title).count() == 0
+        assert InterviewQuestion.query.filter_by(text=original_question_text).count() == 0
 
     def test_deleting_a_resource_keeps_roadmap_items(self, admin, seeded):
         uid = User.query.filter_by(email="admin@example.com").one().id

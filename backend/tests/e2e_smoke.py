@@ -45,7 +45,7 @@ r, j = call("get", "/api/skills/mine")
 check("skills confirmed, none verified yet", len(j["data"]) == 6 and all(x["proficiency_pct"] is None for x in j["data"]))
 
 r, j = call("get", "/api/assessments/catalog")
-sql = next(a for c in j["data"] for a in c["assessments"] if a["skill"] == "SQL")
+sql = next(a for c in j["data"]["categories"] for a in c["assessments"] if a["skill"] == "SQL")
 r, j = call("post", "/api/assessments/attempts", json={"assessment_id": sql["id"], "difficulty": "intermediate", "num_questions": 10, "duration_minutes": 15})
 att = j["data"]["attempt_id"]
 check("start SQL assessment", r.status_code == 201)

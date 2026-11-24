@@ -3,8 +3,9 @@ from flask import Blueprint, request
 from flask_login import current_user
 
 from app.extensions import db
-from app.models import (Assessment, AssessmentAttempt, AssessmentCategory, CareerRole, LearningResource, Question,
-                        QuestionOption, Resume, RoleSkill, SKILL_CATEGORIES, Skill, User, UserSkill)
+from app.models import (Assessment, AssessmentAttempt, AssessmentCategory, CareerRole, InterviewQuestion,
+                        LearningResource, PracticeProject, Question, QuestionOption, Resume, RoleSkill,
+                        SKILL_CATEGORIES, Skill, User, UserSkill)
 from app.services.assessment_service import DIFFICULTIES
 from app.services.seed_service import slugify
 from app.seeds.questions import MARKS
@@ -43,6 +44,8 @@ def stats():
                "completed_attempts": AssessmentAttempt.query.filter(AssessmentAttempt.status != "in_progress").count(),
                "questions": Question.query.filter_by(is_active=True).count(), "skills": Skill.query.filter_by(is_active=True).count(),
                "roles": CareerRole.query.filter_by(is_active=True).count(),
+               "projects": PracticeProject.query.filter_by(is_active=True).count(),
+               "interview_questions": InterviewQuestion.query.filter_by(is_active=True).count(),
                "questions_by_skill": [{"skill": s, "count": n} for s, n in
                                       db.session.query(Skill.name, db.func.count(Question.id)).join(Question).filter(Question.is_active.is_(True))
                                       .group_by(Skill.name).order_by(db.func.count(Question.id).desc()).all()]})
@@ -83,7 +86,8 @@ def patch_user(uid):
 @bp.get("/catalog")
 def catalog():
     return ok({"categories": [{"id": c.id, "name": c.name, "description": c.description, "is_active": c.is_active} for c in AssessmentCategory.query.order_by(AssessmentCategory.position)],
-               "skills": [{"id": s.id, "name": s.name, "category": s.category, "aliases": s.aliases, "is_active": s.is_active} for s in Skill.query.order_by(Skill.name)],
+               "skills": [{"id": s.id, "name": s.name, "slug": s.slug, "category": s.category,
+                           "aliases": s.aliases, "is_active": s.is_active} for s in Skill.query.order_by(Skill.name)],
                "assessments": [{"id": a.id, "title": a.title, "skill_id": a.skill_id, "skill": a.skill.name, "category_id": a.category_id, "is_active": a.is_active,
                                 "questions": Question.query.filter_by(skill_id=a.skill_id, is_active=True).count()} for a in Assessment.query.order_by(Assessment.title)],
                "skill_categories": SKILL_CATEGORIES, "difficulties": DIFFICULTIES})
@@ -351,3 +355,132 @@ def delete_resource(rid):
     r = _get(LearningResource, rid, "Resource")
     db.session.delete(r); db.session.commit()   # roadmap items keep their text; resource link is set to NULL by the FK
     return ok({"deleted": True})
+
+
+# ---- practice projects and interview bank -------------------------------------------------------
+def _string_list(data, field, label, max_items, max_length, required=True):
+    rows = data.get(field)
+    if rows is None and not required:
+        return []
+    if not isinstance(rows, list) or len(rows) > max_items or (required and not rows):
+        requirement = f"Provide between 1 and {max_items} {label.lower()}." if required else f"Provide at most {max_items} {label.lower()}."
+        raise ValidationError({field: requirement})
+    values, seen = [], set()
+    for i, row in enumerate(rows):
+        try:
+            value = clean_str(row, max_length, required=True, field=label)
+        except ValueError as exc:
+            raise ValidationError({f"{field}.{i}": str(exc)})
+        if value not in seen:
+            seen.add(value)
+            values.append(value)
+    if required and not values:
+        raise ValidationError({field: f"Provide at least one {label.lower()}."})
+    return values
+
+
+def _project_dict(project):
+    skill_names = {s.slug: s.name for s in Skill.query.filter(Skill.slug.in_(project.skill_slugs or [])).all()}
+    return {"id": project.id, "title": project.title, "description": project.description,
+            "difficulty": project.difficulty, "skill_slugs": project.skill_slugs,
+            "skills": [skill_names[slug] for slug in project.skill_slugs if slug in skill_names],
+            "objectives": project.objectives, "steps": project.steps,
+            "expected_outcome": project.expected_outcome, "is_active": project.is_active}
+
+
+def _apply_project(project, data):
+    title = _str(data, "title", 200, "Title")
+    description = _str(data, "description", 2000, "Description")
+    if data.get("difficulty") not in DIFFICULTIES:
+        raise ValidationError({"difficulty": "Choose a difficulty."})
+    slugs = _string_list(data, "skill_slugs", "Skills", 20, 100)
+    known = {s.slug for s in Skill.query.filter(Skill.slug.in_(slugs)).all()}
+    if known != set(slugs):
+        raise ValidationError({"skill_slugs": "Choose existing skills."})
+    objectives = _string_list(data, "objectives", "Objectives", 12, 300)
+    steps = _string_list(data, "steps", "Steps", 16, 500)
+    expected = _str(data, "expected_outcome", 2000, "Expected outcome", False)
+    if "is_active" in data and not isinstance(data["is_active"], bool):
+        raise ValidationError({"is_active": "Must be true or false."})
+    project.title, project.description, project.difficulty = title, description, data["difficulty"]
+    project.skill_slugs, project.objectives, project.steps = slugs, objectives, steps
+    project.expected_outcome = expected
+    if "is_active" in data:
+        project.is_active = data["is_active"]
+
+
+@bp.get("/projects")
+def list_projects():
+    rows = PracticeProject.query.order_by(PracticeProject.title, PracticeProject.id).all()
+    return ok([_project_dict(project) for project in rows])
+
+
+@bp.post("/projects")
+def add_project():
+    project = PracticeProject()
+    _apply_project(project, get_json_body())
+    db.session.add(project)
+    db.session.commit()
+    return ok(_project_dict(project), 201)
+
+
+@bp.put("/projects/<int:pid>")
+def edit_project(pid):
+    project, data = _get(PracticeProject, pid, "Project"), get_json_body()
+    merged = {"title": project.title, "description": project.description, "difficulty": project.difficulty,
+              "skill_slugs": project.skill_slugs, "objectives": project.objectives, "steps": project.steps,
+              "expected_outcome": project.expected_outcome, "is_active": project.is_active}
+    merged.update(data)
+    _apply_project(project, merged)
+    db.session.commit()
+    return ok(_project_dict(project))
+
+
+def _interview_question_dict(question):
+    return {"id": question.id, "skill_id": question.skill_id,
+            "skill": question.skill.name if question.skill_id else "Behavioural",
+            "difficulty": question.difficulty, "text": question.text, "keywords": question.keywords,
+            "is_active": question.is_active}
+
+
+def _apply_interview_question(question, data):
+    skill_id = data.get("skill_id")
+    if skill_id is not None and (isinstance(skill_id, bool) or not isinstance(skill_id, int) or not db.session.get(Skill, skill_id)):
+        raise ValidationError({"skill_id": "Choose a valid skill or Behavioural."})
+    if data.get("difficulty") not in DIFFICULTIES:
+        raise ValidationError({"difficulty": "Choose a difficulty."})
+    text = _str(data, "text", 1000, "Question")
+    keywords = _string_list(data, "keywords", "Keywords", 20, 100)
+    if "is_active" in data and not isinstance(data["is_active"], bool):
+        raise ValidationError({"is_active": "Must be true or false."})
+    question.skill_id, question.difficulty = skill_id, data["difficulty"]
+    question.text, question.keywords = text, keywords
+    if "is_active" in data:
+        question.is_active = data["is_active"]
+
+
+@bp.get("/interview-questions")
+def list_interview_questions():
+    rows = InterviewQuestion.query.order_by(InterviewQuestion.skill_id, InterviewQuestion.difficulty,
+                                            InterviewQuestion.id).all()
+    return ok([_interview_question_dict(question) for question in rows])
+
+
+@bp.post("/interview-questions")
+def add_interview_question():
+    question = InterviewQuestion()
+    _apply_interview_question(question, get_json_body())
+    db.session.add(question)
+    db.session.commit()
+    return ok(_interview_question_dict(question), 201)
+
+
+@bp.put("/interview-questions/<int:qid>")
+def edit_interview_question(qid):
+    question, data = _get(InterviewQuestion, qid, "Interview question"), get_json_body()
+    merged = {"skill_id": question.skill_id, "difficulty": question.difficulty, "text": question.text,
+              "keywords": question.keywords, "is_active": question.is_active}
+    merged.update(data)
+    _apply_interview_question(question, merged)
+    db.session.commit()
+    return ok(_interview_question_dict(question))

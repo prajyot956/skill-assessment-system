@@ -42,15 +42,15 @@ cd backend
 $env:FLASK_APP = "run.py"
 .\.venv\Scripts\flask.exe create-admin        # prompts for email, name, password; promotes the account if the email already exists
 ```
-Sign in with that account; an **Administration** item appears in the sidebar (users, question bank, career-role requirements, categories, skills, resources).
+Sign in with that account; an **Administration** item appears in the sidebar (users, assessment questions, career-role requirements, categories, skills, resources, practice projects, and interview questions).
 
 ### Database
 ```powershell
 cd backend; $env:FLASK_APP = "run.py"
 .\.venv\Scripts\flask.exe db upgrade      # apply migrations (backend/migrations)
-.\.venv\Scripts\flask.exe seed            # load skills, assessments, 314 questions, 11 roles, resources, projects (idempotent: never overwrites admin edits)
+.\.venv\Scripts\flask.exe seed            # load skills, assessments, 319 questions, 11 roles, resources, projects, and 52 interview questions (idempotent: never overwrites admin edits)
 ```
-The schema is in `backend/app/models/` (29 tables). To move to PostgreSQL later, set `DATABASE_URL=postgresql+psycopg://...` and `pip install "psycopg[binary]"`; constraint names are explicit so migrations are portable.
+The schema is in `backend/app/models/` (30 tables). To move to PostgreSQL later, set `DATABASE_URL=postgresql+psycopg://...` and `pip install "psycopg[binary]"`; constraint names are explicit so migrations are portable.
 
 ### Configuration (`.env` in the project root; see `.env.example`)
 | Variable | Purpose |
@@ -82,8 +82,8 @@ This free configuration is for demos only: the web service can spin down while i
 
 ### Run the tests
 ```powershell
-cd backend;  .\.venv\Scripts\python.exe -m pytest          # 154 tests
-cd frontend; npm test                                      # 26 tests
+cd backend;  .\.venv\Scripts\python.exe -m pytest          # 155 tests
+cd frontend; npm test                                      # 27 tests
 cd frontend; npm run build                                 # type-check + production build
 # live end-to-end journey against a running API (20 steps):
 cd backend;  .\.venv\Scripts\python.exe tests\e2e_smoke.py http://127.0.0.1:5000
@@ -106,26 +106,26 @@ cd backend;  .\.venv\Scripts\python.exe tests\e2e_smoke.py http://127.0.0.1:5000
 | **Career matching** | Ranked, explainable, deterministic (see `docs/ALGORITHMS.md`); pick a target career. |
 | **Roadmap** | Generated from gaps (learn, practise, mini-project, assess); you mark progress; flagged out-of-date after new results; rebuild keeps your progress. |
 | **Practice** | 13 projects ranked by relevance to your target gaps, with status tracking; mock interviews (bank or AI) with no fake scores. |
-| **Admin** | Users (activate/deactivate), question CRUD with validation (retire, never delete), categories, skills, assessments, role requirements (weights/levels), learning resources, stats. Every admin route is server-gated; a test enforces this for all of them. |
+| **Admin** | Users (activate/deactivate), question CRUD with validation (retire, never delete), categories, skills, assessments, role requirements (weights/levels), learning resources, practice-project and interview-question banks, stats. Every admin route is server-gated; a test enforces this for all of them. |
 
-Data included: 64 skills · 26 built-in assessments · **314 questions** · 11 career roles · 27 learning resources · 13 projects.
+Data included: 64 skills · 26 built-in assessments · **319 assessment questions** · 11 career roles · 27 learning resources · 13 projects · 52 interview questions.
 
 ---
 
 ## 3. Known limitations (please read)
 
 **Verification gaps**
-- **Not run on Windows or in a real browser.** Everything was verified on Linux with automated tests, a production build, and a live end-to-end API run. `setup.ps1` and the UI's visual rendering have not been seen by a human. Expect to find cosmetic issues.
+- The new admin project/interview bank screens have passed a real-browser smoke test. There has not been a full screen-reader or accessibility audit.
 - **AI has not yet been called against the live provider.** The Render blueprint selects Groq, but a newly rotated key must be added in Render before making a live request. Request and response handling is tested with mocked responses, including failures.
 - No screen-reader or full accessibility audit (labels, roles, focus handling and reduced-motion are implemented).
 
 **Content**
-- All 26 built-in assessments have seeded question pools (314 original questions), served to the frontend through this app's API. The catalog is API-backed; the question content itself is stored in the database, not fetched from a third-party question API. Resume-derived skills outside the built-in set can use on-demand AI question generation after Groq is configured.
-- The starter questions were written for this project and should be reviewed by a subject expert before any high-stakes use. Per-difficulty pools are small, so tests with many questions borrow from neighbouring difficulties (the UI says so) and repeat attempts can see questions again across attempts.
+- All 26 built-in assessments have seeded question pools (319 original questions), served to the frontend through this app's API. Each pool has at least three questions at each difficulty. The catalog is API-backed; the question content itself is stored in the database, not fetched from a third-party question API. Resume-derived skills outside the built-in set can use on-demand AI question generation after Groq is configured.
+- The starter questions were written for this project and should be reviewed by a subject expert before any high-stakes use. Pools remain small for longer tests, which borrow from neighbouring difficulties (the UI says so); repeat attempts can also see questions again across attempts.
 - Some role skills are outside the built-in assessment set (for example Docker, AWS, Linux, Git, and Networking). The catalog can add assessments for confirmed profile skills; without configured AI, those extra assessments have no question pool.
 - Difficulty weights (0.6/0.85/1.0), performance bands and match adjustments are sensible design choices, **not psychometrically validated**.
 - Seeded learning-resource links were checked on 2026-11-24; outdated scikit-learn and Linux course links were replaced. External sites can still move pages, and admins can edit resource links.
-- Interview and project banks are edited in `backend/app/seeds/`, not in the admin UI. Difficulty levels are a fixed set.
+- Admins can now add, edit, retire, and restore practice projects and interview-bank questions. Existing interview attempts keep the question snapshots they started with. Difficulty levels remain a fixed set.
 
 **Resume reading**
 - The built-in parser is heuristic and English-only. Unusual layouts (multi-column, tables, graphics-heavy designs) can mis-assign fields. The review step exists for exactly this.

@@ -7,7 +7,7 @@ import { ApiError, http } from '../services/api'
 
 interface Catalog {
   categories: { id: number; name: string; description: string | null; is_active: boolean }[]
-  skills: { id: number; name: string; category: string; is_active: boolean }[]
+  skills: { id: number; name: string; slug: string; category: string; is_active: boolean }[]
   assessments: { id: number; title: string; skill_id: number; skill: string; category_id: number; is_active: boolean; questions: number }[]
   skill_categories: string[]; difficulties: string[]
 }
@@ -18,7 +18,7 @@ function Overview() {
   const { data, loading, error } = useAsync(() => http.get<Record<string, number | { skill: string; count: number }[]>>('/api/admin/stats').then((r) => r.data))
   if (loading) return <Skeleton className="h-40" />
   if (error || !data) return <Alert>{error}</Alert>
-  const items: [string, string][] = [['users', 'Users'], ['active_users', 'Active'], ['admins', 'Admins'], ['resumes', 'Resumes'], ['attempts', 'Attempts'], ['completed_attempts', 'Completed'], ['questions', 'Active questions'], ['skills', 'Skills'], ['roles', 'Roles']]
+  const items: [string, string][] = [['users', 'Users'], ['active_users', 'Active'], ['admins', 'Admins'], ['resumes', 'Resumes'], ['attempts', 'Attempts'], ['completed_attempts', 'Completed'], ['questions', 'Active questions'], ['skills', 'Skills'], ['roles', 'Roles'], ['projects', 'Practice projects'], ['interview_questions', 'Interview questions']]
   return (
     <div className="space-y-6">
       <section className="rounded-lg border border-line bg-surface p-5"><dl className="grid grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-5">{items.map(([k, l]) => <Stat key={k} label={l} value={data[k] as number} />)}</dl></section>
@@ -225,13 +225,135 @@ function Content() {
   )
 }
 
+interface AdminProject {
+  id: number; title: string; description: string; difficulty: string; skill_slugs: string[]
+  skills: string[]; objectives: string[]; steps: string[]; expected_outcome: string | null; is_active: boolean
+}
+interface ProjectDraft {
+  id?: number; title: string; description: string; difficulty: string; skill_slugs: string[]
+  objectives: string; steps: string; expected_outcome: string
+}
+interface AdminInterviewQuestion {
+  id: number; skill_id: number | null; skill: string; difficulty: string; text: string; keywords: string[]; is_active: boolean
+}
+interface InterviewDraft { id?: number; skill_id: string; difficulty: string; text: string; keywords: string }
+
+const emptyProject = (): ProjectDraft => ({ title: '', description: '', difficulty: 'beginner', skill_slugs: [], objectives: '', steps: '', expected_outcome: '' })
+const emptyInterviewQuestion = (): InterviewDraft => ({ skill_id: '', difficulty: 'beginner', text: '', keywords: '' })
+const lines = (value: string) => value.split('\n').map((item) => item.trim()).filter(Boolean)
+
+function Banks() {
+  const cat = useCatalog()
+  const projects = useAsync(() => http.get<AdminProject[]>('/api/admin/projects').then((r) => r.data))
+  const questions = useAsync(() => http.get<AdminInterviewQuestion[]>('/api/admin/interview-questions').then((r) => r.data))
+  const toast = useToast()
+  const [project, setProject] = useState<ProjectDraft | null>(null)
+  const [question, setQuestion] = useState<InterviewDraft | null>(null)
+  const [filter, setFilter] = useState('')
+  const skills = cat.data?.skills ?? []
+  const visibleQuestions = (questions.data ?? []).filter((row) => `${row.skill} ${row.text}`.toLowerCase().includes(filter.toLowerCase()))
+
+  const saveProject = async () => {
+    if (!project) return
+    const body = { ...project, objectives: lines(project.objectives), steps: lines(project.steps) }
+    try {
+      if (project.id) await http.put(`/api/admin/projects/${project.id}`, body)
+      else await http.post('/api/admin/projects', body)
+      toast.success('Practice project saved.')
+      setProject(null)
+      await projects.reload()
+    } catch (e) { toast.error(msg(e)) }
+  }
+  const toggleProject = async (row: AdminProject) => {
+    try {
+      await http.put(`/api/admin/projects/${row.id}`, { is_active: !row.is_active })
+      toast.success(row.is_active ? 'Project retired.' : 'Project restored.')
+      await projects.reload()
+    } catch (e) { toast.error(msg(e)) }
+  }
+  const saveQuestion = async () => {
+    if (!question) return
+    const body = { ...question, skill_id: question.skill_id ? Number(question.skill_id) : null, keywords: lines(question.keywords) }
+    try {
+      if (question.id) await http.put(`/api/admin/interview-questions/${question.id}`, body)
+      else await http.post('/api/admin/interview-questions', body)
+      toast.success('Interview question saved.')
+      setQuestion(null)
+      await questions.reload()
+    } catch (e) { toast.error(msg(e)) }
+  }
+  const toggleQuestion = async (row: AdminInterviewQuestion) => {
+    try {
+      await http.put(`/api/admin/interview-questions/${row.id}`, { is_active: !row.is_active })
+      toast.success(row.is_active ? 'Interview question retired.' : 'Interview question restored.')
+      await questions.reload()
+    } catch (e) { toast.error(msg(e)) }
+  }
+
+  return (
+    <div className="space-y-6">
+      <Panel title="Practice project bank" action={<Button onClick={() => setProject(emptyProject())}><Plus className="h-4 w-4" />New project</Button>}>
+        {project && <div className="mb-5 space-y-3 rounded-lg border border-line bg-sunken/40 p-4">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Input label="Title" value={project.title} onChange={(e) => setProject({ ...project, title: e.target.value })} />
+            <Select label="Difficulty" value={project.difficulty} options={['beginner', 'intermediate', 'advanced'].map((value) => ({ value, label: value }))} onChange={(e) => setProject({ ...project, difficulty: e.target.value })} />
+          </div>
+          <Textarea label="Description" value={project.description} onChange={(e) => setProject({ ...project, description: e.target.value })} />
+          <div><p className="mb-1.5 text-sm font-medium">Skills</p><div className="grid max-h-36 grid-cols-2 gap-1 overflow-auto rounded-md border border-line bg-surface p-2 text-sm sm:grid-cols-3">
+            {skills.map((skill) => <label key={skill.id} className="flex items-center gap-2"><input type="checkbox" checked={project.skill_slugs.includes(skill.slug)}
+              onChange={(e) => setProject({ ...project, skill_slugs: e.target.checked ? [...project.skill_slugs, skill.slug] : project.skill_slugs.filter((item) => item !== skill.slug) })} />{skill.name}</label>)}
+          </div></div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Textarea label="Objectives (one per line)" value={project.objectives} onChange={(e) => setProject({ ...project, objectives: e.target.value })} className="min-h-24" />
+            <Textarea label="Steps (one per line)" value={project.steps} onChange={(e) => setProject({ ...project, steps: e.target.value })} className="min-h-24" />
+          </div>
+          <Textarea label="Expected outcome" value={project.expected_outcome} onChange={(e) => setProject({ ...project, expected_outcome: e.target.value })} />
+          <div className="flex justify-end gap-2"><Button variant="secondary" onClick={() => setProject(null)}>Cancel</Button><Button disabled={!project.title.trim() || !project.description.trim()} onClick={() => void saveProject()}>Save project</Button></div>
+        </div>}
+        {projects.error && <Alert>{projects.error}</Alert>}
+        {!projects.data ? <Skeleton className="h-24" /> : <ul className="divide-y divide-line">
+          {projects.data.map((row) => <li key={row.id} className="flex flex-wrap items-start gap-3 py-3 text-sm">
+            <div className="min-w-0 flex-1"><p className={row.is_active ? 'font-medium' : 'font-medium text-muted line-through'}>{row.title}</p>
+              <p className="text-xs text-muted">{row.difficulty} · {row.skills.length ? row.skills.join(', ') : 'No skills'} · {row.steps.length} steps{!row.is_active && ' · retired'}</p></div>
+            <Button variant="secondary" onClick={() => setProject({ id: row.id, title: row.title, description: row.description, difficulty: row.difficulty,
+              skill_slugs: row.skill_slugs, objectives: row.objectives.join('\n'), steps: row.steps.join('\n'), expected_outcome: row.expected_outcome ?? '' })}>Edit</Button>
+            <Button variant="ghost" onClick={() => void toggleProject(row)}>{row.is_active ? 'Retire' : 'Restore'}</Button>
+          </li>)}
+        </ul>}
+      </Panel>
+
+      <Panel title="Interview question bank" action={<Button onClick={() => setQuestion(emptyInterviewQuestion())}><Plus className="h-4 w-4" />New question</Button>}>
+        {question && <div className="mb-5 space-y-3 rounded-lg border border-line bg-sunken/40 p-4">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Select label="Skill group" value={question.skill_id} placeholder="Behavioural" options={skills.map((skill) => ({ value: skill.id, label: skill.name }))} onChange={(e) => setQuestion({ ...question, skill_id: e.target.value })} />
+            <Select label="Difficulty" value={question.difficulty} options={['beginner', 'intermediate', 'advanced'].map((value) => ({ value, label: value }))} onChange={(e) => setQuestion({ ...question, difficulty: e.target.value })} />
+          </div>
+          <Textarea label="Question text" value={question.text} onChange={(e) => setQuestion({ ...question, text: e.target.value })} />
+          <Textarea label="Key points (one per line)" value={question.keywords} onChange={(e) => setQuestion({ ...question, keywords: e.target.value })} className="min-h-24" />
+          <div className="flex justify-end gap-2"><Button variant="secondary" onClick={() => setQuestion(null)}>Cancel</Button><Button disabled={!question.text.trim()} onClick={() => void saveQuestion()}>Save question</Button></div>
+        </div>}
+        <div className="mb-3 max-w-sm"><Input label="Filter by skill or question" value={filter} onChange={(e) => setFilter(e.target.value)} /></div>
+        {questions.error && <Alert>{questions.error}</Alert>}
+        {!questions.data ? <Skeleton className="h-24" /> : visibleQuestions.length === 0 ? <p className="text-sm text-muted">No questions match.</p> : <ul className="max-h-[32rem] divide-y divide-line overflow-auto">
+          {visibleQuestions.map((row) => <li key={row.id} className="flex flex-wrap items-start gap-3 py-3 text-sm">
+            <div className="min-w-0 flex-1"><p className={row.is_active ? 'font-medium' : 'font-medium text-muted line-through'}>{row.text}</p>
+              <p className="mt-0.5 text-xs text-muted">{row.skill} · {row.difficulty} · Key points: {row.keywords.join(', ')}{!row.is_active && ' · retired'}</p></div>
+            <Button variant="secondary" onClick={() => setQuestion({ id: row.id, skill_id: row.skill_id ? String(row.skill_id) : '', difficulty: row.difficulty, text: row.text, keywords: row.keywords.join('\n') })}>Edit</Button>
+            <Button variant="ghost" onClick={() => void toggleQuestion(row)}>{row.is_active ? 'Retire' : 'Restore'}</Button>
+          </li>)}
+        </ul>}
+      </Panel>
+    </div>
+  )
+}
+
 export function AdminPage() {
-  const [tab, setTab] = useState<'overview' | 'users' | 'questions' | 'roles' | 'content'>('overview')
+  const [tab, setTab] = useState<'overview' | 'users' | 'questions' | 'roles' | 'content' | 'banks'>('overview')
   return (
     <>
-      <PageHeader title="Administration" subtitle="Manage users, assessments, questions and career requirements." />
-      <Tabs tabs={[{ id: 'overview', label: 'Overview' }, { id: 'users', label: 'Users' }, { id: 'questions', label: 'Questions' }, { id: 'roles', label: 'Career roles' }, { id: 'content', label: 'Skills & content' }]} value={tab} onChange={setTab} />
-      {tab === 'overview' && <Overview />}{tab === 'users' && <Users />}{tab === 'questions' && <Questions />}{tab === 'roles' && <Roles />}{tab === 'content' && <Content />}
+      <PageHeader title="Administration" subtitle="Manage users, assessments, questions, career requirements and learning content." />
+      <Tabs tabs={[{ id: 'overview', label: 'Overview' }, { id: 'users', label: 'Users' }, { id: 'questions', label: 'Questions' }, { id: 'roles', label: 'Career roles' }, { id: 'content', label: 'Skills & content' }, { id: 'banks', label: 'Practice & interview banks' }]} value={tab} onChange={setTab} />
+      {tab === 'overview' && <Overview />}{tab === 'users' && <Users />}{tab === 'questions' && <Questions />}{tab === 'roles' && <Roles />}{tab === 'content' && <Content />}{tab === 'banks' && <Banks />}
     </>
   )
 }

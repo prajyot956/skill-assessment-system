@@ -53,6 +53,7 @@ class RoadmapItem(db.Model):
 class PracticeProject(db.Model):
     __tablename__ = "practice_projects"
     id = db.Column(db.Integer, primary_key=True)
+    seed_key = db.Column(db.String(200), unique=True)
     title = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text, nullable=False)
     difficulty = db.Column(db.String(20), nullable=False)
@@ -61,6 +62,19 @@ class PracticeProject(db.Model):
     steps = db.Column(db.JSON, nullable=False, default=list)
     expected_outcome = db.Column(db.Text)
     is_active = db.Column(db.Boolean, nullable=False, default=True)
+
+
+class InterviewQuestion(db.Model):
+    __tablename__ = "interview_question_bank"
+    id = db.Column(db.Integer, primary_key=True)
+    seed_key = db.Column(db.String(64), unique=True)
+    skill_id = db.Column(db.Integer, db.ForeignKey("skills.id", ondelete="SET NULL"), index=True)
+    difficulty = db.Column(db.String(20), nullable=False)
+    text = db.Column(db.Text, nullable=False)
+    keywords = db.Column(db.JSON, nullable=False, default=list)
+    is_active = db.Column(db.Boolean, nullable=False, default=True)
+
+    skill = db.relationship("Skill")
 
 
 class UserProjectStatus(db.Model):

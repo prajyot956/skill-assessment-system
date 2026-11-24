@@ -41,12 +41,15 @@ class TestCatalogAndStart:
         assert len(skill_names) == 26
         for name in skill_names:
             skill = Skill.query.filter_by(name=name).one()
-            assert svc.available_counts(skill.id)["total"] >= svc.MIN_QUESTIONS, name
+            counts = svc.available_counts(skill.id)
+            assert counts["total"] >= svc.MIN_QUESTIONS, name
+            assert all(counts[difficulty] >= 3 for difficulty in svc.DIFFICULTIES), (name, counts)
 
     def test_catalog_lists_available_assessments_without_answers(self, seeded, make_client):
         c = make_client()
         r = c.get("/api/assessments/catalog")
-        cats = {x["name"]: x for x in r.json["data"]}
+        assert r.json["data"]["ai_enabled"] is False
+        cats = {x["name"]: x for x in r.json["data"]["categories"]}
         assert set(cats) == {"Programming", "Web Development", "Database", "Data Analytics", "AI and Machine Learning", "Other"}
         prog = {a["skill"]: a for a in cats["Programming"]["assessments"]}
         assert prog["Python"]["available"] is True and prog["Python"]["questions"]["total"] == 13
@@ -66,7 +69,7 @@ class TestCatalogAndStart:
 
     def test_count_is_capped_to_the_pool(self, seeded, make_client):
         r = start(make_client(), "HTML", n=30)
-        assert r.status_code == 201 and r.json["data"]["num_questions"] == 8 and r.json["data"]["capped"] is True
+        assert r.status_code == 201 and r.json["data"]["num_questions"] == 10 and r.json["data"]["capped"] is True
 
     def test_starting_again_resumes_the_open_attempt(self, seeded, make_client):
         c = make_client()

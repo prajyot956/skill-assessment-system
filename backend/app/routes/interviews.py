@@ -1,14 +1,13 @@
 import random
 
-from flask import Blueprint
+from flask import Blueprint, current_app
 from flask_login import current_user
 
 from app.ai import features
 from app.ai.provider import AIUnavailable, ai_enabled
 from app.extensions import db, limiter
-from app.models import CareerRole, MockInterview, UserSkill
+from app.models import CareerRole, InterviewQuestion, MockInterview, UserSkill
 from app.models.base import utcnow
-from app.seeds.learning import BEHAVIOURAL, INTERVIEW_BANK
 from app.utils.decorators import get_json_body, login_required_api
 from app.utils.responses import ApiError, ValidationError, ok
 
@@ -37,13 +36,27 @@ def build_questions(role, difficulty, n, rng=None):
             ai_qs = features.generate_interview_questions(role_name, difficulty, n, exclude_texts=list(asked_texts))
             if len(ai_qs) >= 3:
                 return ai_qs[:n]
-        except Exception:
-            pass
+        except AIUnavailable as exc:
+            current_app.logger.warning("AI interview question generation unavailable; using bank: %s", exc)
 
     # Bank fallback: select role-relevant skills, prioritizing unasked questions
-    skills = [rs.skill.name for rs in sorted(role.skills, key=lambda r: -r.weight)] if role else \
-        [us.skill.name for us in UserSkill.query.filter_by(user_id=current_user.id, status="user_confirmed")]
-    pool = [{"skill": s, "difficulty": d, "text": q, "keywords": kw} for s in skills for d, q, kw in INTERVIEW_BANK.get(s, [])]
+    skill_ids = [rs.skill_id for rs in sorted(role.skills, key=lambda r: -r.weight)] if role else \
+        [us.skill_id for us in UserSkill.query.filter_by(user_id=current_user.id, status="user_confirmed")]
+    bank = InterviewQuestion.query.filter(
+        InterviewQuestion.is_active.is_(True),
+        db.or_(InterviewQuestion.skill_id.in_(skill_ids), InterviewQuestion.skill_id.is_(None))
+        if skill_ids else InterviewQuestion.skill_id.is_(None)
+    ).all()
+    by_skill = {}
+    behavioural = []
+    for row in bank:
+        question = {"skill": row.skill.name if row.skill_id else "Behavioural", "difficulty": row.difficulty,
+                    "text": row.text, "keywords": row.keywords}
+        if row.skill_id is None:
+            behavioural.append(question)
+        else:
+            by_skill.setdefault(row.skill_id, []).append(question)
+    pool = [q for skill_id in skill_ids for q in by_skill.get(skill_id, [])]
 
     unasked_exact = [q for q in pool if q["difficulty"] == difficulty and q["text"] not in asked_texts]
     unasked_rest = [q for q in pool if q["difficulty"] != difficulty and q["text"] not in asked_texts]
@@ -56,9 +69,8 @@ def build_questions(role, difficulty, n, rng=None):
     rng.shuffle(asked_rest)
     tech = (unasked_exact + unasked_rest + asked_exact + asked_rest)[: max(n - 1, 1)]
 
-    behav_pool = [{"skill": "Behavioural", "difficulty": d, "text": q, "keywords": kw} for d, q, kw in BEHAVIOURAL]
-    unasked_behav = [b for b in behav_pool if b["text"] not in asked_texts]
-    asked_behav = [b for b in behav_pool if b["text"] in asked_texts]
+    unasked_behav = [b for b in behavioural if b["text"] not in asked_texts]
+    asked_behav = [b for b in behavioural if b["text"] in asked_texts]
     rng.shuffle(unasked_behav)
     rng.shuffle(asked_behav)
     behav = unasked_behav + asked_behav

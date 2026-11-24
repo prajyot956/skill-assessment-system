@@ -61,8 +61,10 @@ QUESTIONS = {
  ("Links", B, "x", "Which tag creates a hyperlink?", None, ["a", "<a>", "anchor"], "The anchor element <a> with an href attribute."),
  ("Semantics", I, "m", "Which are semantic HTML5 elements?", ["<article>", "<section>", "<span>", "<nav>"], [0, 1, 3], "<span> is generic inline markup."),
  ("Forms", I, "s", "Which input type shows a date picker?", ["date", "calendar", "datetime-text", "day"], 0, "<input type=\"date\"> renders a native picker."),
+ ("Scripts", I, "s", "For a classic external script, what does the defer attribute do?", ["Downloads in parallel and executes after HTML parsing", "Executes before HTML parsing begins", "Downloads only after DOMContentLoaded", "Runs the script in a web worker"], 0, "A deferred classic script runs after parsing and before DOMContentLoaded."),
  ("Responsive", A, "s", "What does <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"> do?", ["Controls page scaling and layout on mobile browsers", "Sets the page title", "Links a stylesheet", "Adds SEO keywords"], 0, "Without it, mobile browsers render a zoomed-out desktop layout."),
  ("Accessibility", A, "s", "How do you associate a label with an input for accessibility?", ["Label's for attribute matching the input's id", "Matching class names", "Adjacent tags only", "The name attribute"], 0, "<label for=\"x\"> pairs with <input id=\"x\">."),
+ ("Forms", A, "s", "Which button type does not submit its enclosing form when clicked?", ["button", "submit", "reset", "form"], 0, "A button with type=\"button\" does not submit its enclosing form."),
 ],
 "CSS": [
  ("Text", B, "s", "Which property changes text color?", ["color", "font-color", "text-color", "foreground"], 0, "color sets the foreground text color."),
@@ -73,6 +75,7 @@ QUESTIONS = {
  ("Box model", I, "x", "Which property sets the space between an element's content and its border?", None, ["padding"], "Padding is inside the border; margin is outside."),
  ("Positioning", A, "s", "What does position: sticky do?", ["Acts relative until a scroll threshold, then sticks like fixed", "Removes the element from the flow permanently", "Always fixes the element to the viewport", "Centers the element"], 0, "Sticky elements stay within their container while pinned."),
  ("Stacking", A, "m", "Which of these create a new stacking context?", ["position: fixed", "opacity less than 1", "display: inline", "a transform other than none"], [0, 1, 3], "display: inline does not create a stacking context."),
+ ("Positioning", A, "s", "An absolutely positioned element is generally positioned relative to which ancestor?", ["The nearest ancestor with a position value other than static", "The nearest flex container", "The nearest sibling", "The root element's font size"], 0, "Its containing block is normally the nearest positioned ancestor."),
 ],
 "Machine Learning": [
  ("Fundamentals", B, "s", "Which is a supervised learning task?", ["Predicting house prices from labelled examples", "Grouping customers without labels", "Reducing the number of features", "Finding unusual points without labels"], 0, "Supervised learning learns from labelled data."),
@@ -111,6 +114,7 @@ QUESTIONS = {
  ("Directions", I, "s", "Facing north you turn right, then left, then left. Which way do you face?", ["West", "East", "South", "North"], 0, "North, right is East, left is North, left is West."),
  ("Series", A, "s", "What comes next: 3, 6, 11, 18, 27, ?", ["38", "36", "40", "35"], 0, "Differences are 3, 5, 7, 9, so next is +11: 38."),
  ("Clocks", A, "s", "How many times do the hands of a clock overlap in 12 hours?", ["11", "12", "10", "13"], 0, "They overlap 11 times, since the 12th overlap coincides with the start of the next cycle."),
+ ("Ordering", A, "s", "Tasks W, X, Y and Z are scheduled once each. W must precede X, X must precede Y, and Z cannot be immediately before or after Y. Which sequence works?", ["W, X, Y, Z", "W, X, Z, Y", "W, Z, X, Y", "Z, W, X, Y"], 3, "The first three tasks must remain in W-X-Y order; placing Z first leaves it nonadjacent to Y."),
 ],
 "Quantitative Aptitude": [
  ("Percentages", B, "s", "What is 15% of 200?", ["30", "15", "20", "25"], 0, "0.15 x 200 = 30."),
@@ -135,6 +139,7 @@ QUESTIONS = {
  ("Data quality", I, "t", "Data Validation can restrict a cell to a list of allowed values.", None, True, "Use the List validation type."),
  ("Lookup", A, "s", "Which combination is more flexible than VLOOKUP because it can look to the left?", ["INDEX with MATCH", "SUM with IF", "LEN with LEFT", "TEXT with DATE"], 0, "INDEX/MATCH is not limited to the first column."),
  ("Errors", A, "s", "What does =IFERROR(A1/B1, 0) return when B1 is 0?", ["0", "#DIV/0!", "A blank cell", "A1"], 0, "IFERROR replaces the error with the fallback value."),
+ ("Analysis", A, "s", "Which function sums B2:B100 when A2:A100 equals \"Hardware\" and dates in C2:C100 are on or after 1 Jan 2025?", ["SUMIFS", "SUMIF", "COUNTIFS", "AVERAGEIFS"], 0, "SUMIFS applies multiple criteria to a sum range."),
 ],
 "C++": [
  ("Basics", B, "s", "Which symbol ends a statement in C++?", [";", ":", ".", "#"], 0, "Every statement in C++ is terminated with a semicolon."),

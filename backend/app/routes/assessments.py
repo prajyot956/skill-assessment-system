@@ -1,6 +1,7 @@
 from flask import Blueprint, request
 from flask_login import current_user
 
+from app.ai.provider import ai_enabled
 from app.extensions import db
 from app.models import Assessment, AssessmentAttempt, AssessmentCategory, AssessmentResult, Question, QuestionOption, UserSkill
 from app.services import assessment_service as svc
@@ -58,7 +59,7 @@ def catalog():
                           "proficiency_pct": round(us.proficiency_pct, 1) if us and us.proficiency_pct is not None else None,
                           "in_progress_attempt_id": in_progress[a.id].id if a.id in in_progress else None})
         out.append({"id": cat.id, "name": cat.name, "description": cat.description, "assessments": items})
-    return ok(out)
+    return ok({"categories": out, "ai_enabled": ai_enabled()})
 
 
 @bp.post("/attempts")

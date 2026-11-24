@@ -91,6 +91,8 @@ Generated from the application's route table at the time of release, so every li
 | POST | `/api/assessments/attempts/{attempt_id}/submit` | signed-in |  |
 | GET | `/api/assessments/catalog` | signed-in |  |
 
+The assessment catalog response contains `categories` and an `ai_enabled` flag. Assessments without a seeded question pool can be generated on demand only when AI is configured; otherwise they are shown as unavailable.
+
 ## Skill analysis
 
 | Method | Path | Access | Notes |
@@ -156,10 +158,16 @@ Generated from the application's route table at the time of release, so every li
 | GET | `/api/admin/catalog` | admin |  |
 | POST | `/api/admin/categories` | admin |  |
 | PUT | `/api/admin/categories/{cid}` | admin |  |
+| GET | `/api/admin/interview-questions` | admin | Set `is_active` to false to retire a question; existing interview snapshots are unchanged. |
+| POST | `/api/admin/interview-questions` | admin |  |
+| PUT | `/api/admin/interview-questions/{qid}` | admin |  |
 | GET | `/api/admin/questions` | admin |  |
 | POST | `/api/admin/questions` | admin |  |
 | DELETE | `/api/admin/questions/{qid}` | admin | Soft delete: past attempts reference the question, so it is deactivated instead of removed. |
 | PUT | `/api/admin/questions/{qid}` | admin |  |
+| GET | `/api/admin/projects` | admin |  |
+| POST | `/api/admin/projects` | admin |  |
+| PUT | `/api/admin/projects/{pid}` | admin | Set `is_active` to false to retire a project. |
 | GET | `/api/admin/resources` | admin |  |
 | POST | `/api/admin/resources` | admin |  |
 | DELETE | `/api/admin/resources/{rid}` | admin |  |
